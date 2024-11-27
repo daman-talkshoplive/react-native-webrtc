@@ -257,53 +257,56 @@ RCT_EXPORT_METHOD(getUserMedia
 
 #pragma mark - Other stream related APIs
 
-RCT_EXPORT_METHOD(enumerateDevices : (RCTResponseSenderBlock)callback) {
-#if TARGET_OS_TV
-    callback(@[]);
-#else
-    NSMutableArray *devices = [NSMutableArray array];
-    AVCaptureDeviceDiscoverySession *videoevicesSession =
-        [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes:@[ AVCaptureDeviceTypeBuiltInWideAngleCamera ]
-                                                               mediaType:AVMediaTypeVideo
-                                                                position:AVCaptureDevicePositionUnspecified];
-    for (AVCaptureDevice *device in videoevicesSession.devices) {
-        NSString *position = @"unknown";
-        if (device.position == AVCaptureDevicePositionBack) {
-            position = @"environment";
-        } else if (device.position == AVCaptureDevicePositionFront) {
-            position = @"front";
-        }
-        NSString *label = @"Unknown video device";
-        if (device.localizedName != nil) {
-            label = device.localizedName;
-        }
-        [devices addObject:@{
-            @"facing" : position,
-            @"deviceId" : device.uniqueID,
-            @"groupId" : @"",
-            @"label" : label,
-            @"kind" : @"videoinput",
-        }];
-    }
-    AVCaptureDeviceDiscoverySession *audioDevicesSession =
-        [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes:@[ AVCaptureDeviceTypeBuiltInMicrophone ]
-                                                               mediaType:AVMediaTypeAudio
-                                                                position:AVCaptureDevicePositionUnspecified];
-    for (AVCaptureDevice *device in audioDevicesSession.devices) {
-        NSString *label = @"Unknown audio device";
-        if (device.localizedName != nil) {
-            label = device.localizedName;
-        }
-        [devices addObject:@{
-            @"deviceId" : device.uniqueID,
-            @"groupId" : @"",
-            @"label" : label,
-            @"kind" : @"audioinput",
-        }];
-    }
-    callback(@[ devices ]);
-#endif
-}
+// Disabling this method, we are implementing that inside of WebRTCModule+DevicesManager to list also the output devices
+// and keep all the logic related with the devices in a single place
+//RCT_EXPORT_METHOD(enumerateDevices:(RCTResponseSenderBlock)callback)
+//{
+//#if TARGET_OS_TV
+//    callback(@[]);
+//#else
+//    NSMutableArray *devices = [NSMutableArray array];
+//    AVCaptureDeviceDiscoverySession *videoevicesSession
+//        = [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes:@[ AVCaptureDeviceTypeBuiltInWideAngleCamera ]
+//                                                                 mediaType:AVMediaTypeVideo
+//                                                                  position:AVCaptureDevicePositionUnspecified];
+//    for (AVCaptureDevice *device in videoevicesSession.devices) {
+//        NSString *position = @"unknown";
+//        if (device.position == AVCaptureDevicePositionBack) {
+//            position = @"environment";
+//        } else if (device.position == AVCaptureDevicePositionFront) {
+//            position = @"front";
+//        }
+//        NSString *label = @"Unknown video device";
+//        if (device.localizedName != nil) {
+//            label = device.localizedName;
+//        }
+//        [devices addObject:@{
+//                             @"facing": position,
+//                             @"deviceId": device.uniqueID,
+//                             @"groupId": @"",
+//                             @"label": label,
+//                             @"kind": @"videoinput",
+//                             }];
+//    }
+//    AVCaptureDeviceDiscoverySession *audioDevicesSession
+//        = [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes:@[ AVCaptureDeviceTypeBuiltInMicrophone ]
+//                                                                 mediaType:AVMediaTypeAudio
+//                                                                  position:AVCaptureDevicePositionUnspecified];
+//    for (AVCaptureDevice *device in audioDevicesSession.devices) {
+//        NSString *label = @"Unknown audio device";
+//        if (device.localizedName != nil) {
+//            label = device.localizedName;
+//        }
+//        [devices addObject:@{
+//                             @"deviceId": device.uniqueID,
+//                             @"groupId": @"",
+//                             @"label": label,
+//                             @"kind": @"audioinput",
+//                             }];
+//    }
+//    callback(@[devices]);
+//#endif
+//}
 
 RCT_EXPORT_METHOD(mediaStreamCreate : (nonnull NSString *)streamID) {
     RTCMediaStream *mediaStream = [self.peerConnectionFactory mediaStreamWithStreamId:streamID];
@@ -391,16 +394,39 @@ RCT_EXPORT_METHOD(mediaStreamTrackSetEnabled : (nonnull NSNumber *)pcId : (nonnu
 #endif
 }
 
-RCT_EXPORT_METHOD(mediaStreamTrackSwitchCamera : (nonnull NSString *)trackID) {
+RCT_EXPORT_METHOD(mediaStreamTrackSwitchCamera:(nonnull NSString *)trackID
+                  withResolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
 #if TARGET_OS_TV
     return;
 #else
     RTCMediaStreamTrack *track = self.localTracks[trackID];
     if (track) {
         RTCVideoTrack *videoTrack = (RTCVideoTrack *)track;
-        [(VideoCaptureController *)videoTrack.captureController switchCamera];
-    }
+    NSString *newFacingMode = [(VideoCaptureController *)videoTrack.captureController switchCamera];
+    resolve(newFacingMode);
+    return;
+  }
+  reject(@"switch_camera_error",
+         @"Local track not found when attempting to switch camera",
+         nil);
 #endif
+}
+
+RCT_EXPORT_METHOD(mediaStreamTrackGetCameraFacingMode:(nonnull NSString *)trackID
+                  withResolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+  RTCMediaStreamTrack *track = self.localTracks[trackID];
+  if (track) {
+    RTCVideoTrack *videoTrack = (RTCVideoTrack *)track;
+    resolve([(VideoCaptureController *)videoTrack.captureController facingMode]);
+    return;
+  }
+  reject(@"get_camera_facing_mode_error",
+         @"Local track not found when attempting to get camera facing mode",
+         nil);
 }
 
 RCT_EXPORT_METHOD(mediaStreamTrackSetVolume : (nonnull NSNumber *)pcId : (nonnull NSString *)trackID : (double)volume) {

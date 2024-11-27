@@ -128,12 +128,17 @@
     dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
 }
 
-- (void)switchCamera {
+-(NSString *)switchCamera {
     self.usingFrontCamera = !self.usingFrontCamera;
     self.deviceId = nil;
     self.device = nil;
 
     [self startCapture];
+    return [self facingMode];
+}
+
+-(NSString *)facingMode {
+    return self.usingFrontCamera ? @"user" : @"environment";
 }
 
 #pragma mark NSKeyValueObserving
