@@ -172,47 +172,47 @@ RCT_EXPORT_METHOD(getAudioDevice: (RCTPromiseResolveBlock)resolve
 // https://github.com/xialin/AudioSessionManager/blob/master/AudioSessionManager.m
 RCT_EXPORT_METHOD(setAudioDevice:(NSString*)deviceId) {
     NSLog(@"[Daily] setAudioDevice: %@", deviceId);
-
-    [self setAudioMode: AUDIO_MODE_USER_SPECIFIED_ROUTE];
-    self.userSelectedDevice = deviceId;
-
-    // Ducking other apps' audio implicitly enables allowing mixing audio with
-    // other apps, which allows this app to stay alive in the backgrounnd during
-    // a call (assuming it has the voip background mode set).
-    // After iOS 16, we must also always keep the bluetooth option here, otherwise
-    // we are not able to see the bluetooth devices on the list
-    AVAudioSessionCategoryOptions categoryOptions = (AVAudioSessionCategoryOptionAllowBluetooth |
-                                                     AVAudioSessionCategoryOptionMixWithOthers);
-    NSString *mode = AVAudioSessionModeVoiceChat;
-
-    // Earpiece: is default route for a call.
-    // Speaker: the speaker is the default output audio for like music, video, ring tone.
-    // Bluetooth: whenever a bluetooth device connected, the bluetooth device will become the default audio route.
-    // Headphones: whenever any headphones plugged in, it becomes the default audio route even there is also bluetooth device.
-    //  And it overwrites the handset(iPhone) option, which means you cannot change to the earpiece, bluetooth.
-    if([SPEAKERPHONE_DEVICE_ID isEqualToString: deviceId]){
-        NSLog(@"[Daily] configuring output to SPEAKER");
-        categoryOptions |= AVAudioSessionCategoryOptionDefaultToSpeaker;
-        mode = AVAudioSessionModeVideoChat;
-    }
-
-    AVAudioSession *audioSession = AVAudioSession.sharedInstance;
-    [self configureAudioSession:audioSession audioMode:mode categoryOptions:categoryOptions];
-
-    // Force to speaker. We only need to do that the cases a wired headset is connected, but we still want to force to speaker
-    if([SPEAKERPHONE_DEVICE_ID isEqualToString: deviceId]){
-        [audioSession overrideOutputAudioPort: AVAudioSessionPortOverrideSpeaker error: nil];
-    } else if([WIRED_OR_EARPIECE_DEVICE_ID isEqualToString: deviceId]){
-        [audioSession overrideOutputAudioPort: AVAudioSessionPortOverrideNone error: nil];
-        NSArray<AVAudioSessionPortDescription *> *availableInputs = [audioSession availableInputs];
-        for (AVAudioSessionPortDescription *device in availableInputs) {
-            if([self isBuiltInMic:[device portType]]){
-                NSLog(@"[Daily] forcing preferred input to built in device");
-                [audioSession setPreferredInput:device error:nil];
-                return;
-            }
-        }
-    }
+//
+//     [self setAudioMode: AUDIO_MODE_USER_SPECIFIED_ROUTE];
+//     self.userSelectedDevice = deviceId;
+//
+//     // Ducking other apps' audio implicitly enables allowing mixing audio with
+//     // other apps, which allows this app to stay alive in the backgrounnd during
+//     // a call (assuming it has the voip background mode set).
+//     // After iOS 16, we must also always keep the bluetooth option here, otherwise
+//     // we are not able to see the bluetooth devices on the list
+//     AVAudioSessionCategoryOptions categoryOptions = (AVAudioSessionCategoryOptionAllowBluetooth |
+//                                                      AVAudioSessionCategoryOptionMixWithOthers);
+//     NSString *mode = AVAudioSessionModeVoiceChat;
+//
+//     // Earpiece: is default route for a call.
+//     // Speaker: the speaker is the default output audio for like music, video, ring tone.
+//     // Bluetooth: whenever a bluetooth device connected, the bluetooth device will become the default audio route.
+//     // Headphones: whenever any headphones plugged in, it becomes the default audio route even there is also bluetooth device.
+//     //  And it overwrites the handset(iPhone) option, which means you cannot change to the earpiece, bluetooth.
+//     if([SPEAKERPHONE_DEVICE_ID isEqualToString: deviceId]){
+//         NSLog(@"[Daily] configuring output to SPEAKER");
+//         categoryOptions |= AVAudioSessionCategoryOptionDefaultToSpeaker;
+//         mode = AVAudioSessionModeVideoChat;
+//     }
+//
+//     AVAudioSession *audioSession = AVAudioSession.sharedInstance;
+//     [self configureAudioSession:audioSession audioMode:mode categoryOptions:categoryOptions];
+//
+//     // Force to speaker. We only need to do that the cases a wired headset is connected, but we still want to force to speaker
+//     if([SPEAKERPHONE_DEVICE_ID isEqualToString: deviceId]){
+//         [audioSession overrideOutputAudioPort: AVAudioSessionPortOverrideSpeaker error: nil];
+//     } else if([WIRED_OR_EARPIECE_DEVICE_ID isEqualToString: deviceId]){
+//         [audioSession overrideOutputAudioPort: AVAudioSessionPortOverrideNone error: nil];
+//         NSArray<AVAudioSessionPortDescription *> *availableInputs = [audioSession availableInputs];
+//         for (AVAudioSessionPortDescription *device in availableInputs) {
+//             if([self isBuiltInMic:[device portType]]){
+//                 NSLog(@"[Daily] forcing preferred input to built in device");
+//                 [audioSession setPreferredInput:device error:nil];
+//                 return;
+//             }
+//         }
+//     }
 }
 
 - (void)configureAudioSession:(nonnull AVAudioSession *)audioSession
