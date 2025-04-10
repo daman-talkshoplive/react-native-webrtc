@@ -229,43 +229,43 @@ RCT_EXPORT_METHOD(setAudioDevice:(NSString*)deviceId) {
                       toSession:(AVAudioSession *)audioSession
                         options:(AVAudioSessionCategoryOptions)options
 {
-  @try {
-    [audioSession setCategory:audioCategory
-                  withOptions:options
-                        error:nil];
-    NSLog(@"[Daily] audioSession.setCategory: %@, withOptions: %lu success", audioCategory, (unsigned long)options);
-  } @catch (NSException *e) {
-    NSLog(@"[Daily] audioSession.setCategory: %@, withOptions: %lu fail: %@", audioCategory, (unsigned long)options, e.reason);
-  }
+//   @try {
+//     [audioSession setCategory:audioCategory
+//                   withOptions:options
+//                         error:nil];
+//     NSLog(@"[Daily] audioSession.setCategory: %@, withOptions: %lu success", audioCategory, (unsigned long)options);
+//   } @catch (NSException *e) {
+//     NSLog(@"[Daily] audioSession.setCategory: %@, withOptions: %lu fail: %@", audioCategory, (unsigned long)options, e.reason);
+//   }
 }
 
 - (void)audioSessionSetMode:(NSString *)audioMode
                   toSession:(AVAudioSession *)audioSession
 {
-  @try {
-    [audioSession setMode:audioMode error:nil];
-    NSLog(@"[Daily] audioSession.setMode(%@) success", audioMode);
-  } @catch (NSException *e) {
-    NSLog(@"[Daily] audioSession.setMode(%@) fail: %@", audioMode, e.reason);
-  }
+//   @try {
+//     [audioSession setMode:audioMode error:nil];
+//     NSLog(@"[Daily] audioSession.setMode(%@) success", audioMode);
+//   } @catch (NSException *e) {
+//     NSLog(@"[Daily] audioSession.setMode(%@) fail: %@", audioMode, e.reason);
+//   }
 }
 
 - (void)devicesChanged:(NSNotification *)notification {
-    // Possible change reasons: AVAudioSessionRouteChangeReasonOldDeviceUnavailable AVAudioSessionRouteChangeReasonNewDeviceAvailable
-    NSInteger changeReason = [[notification.userInfo objectForKey:AVAudioSessionRouteChangeReasonKey] integerValue];
-    NSLog(@"[Daily] devicesChanged %zd", changeReason);
-
-    // AVAudioSessionRouteDescription *oldRoute = [notification.userInfo objectForKey:AVAudioSessionRouteChangePreviousRouteKey];
-    // NSString *oldOutput = [[oldRoute.outputs objectAtIndex:0] portType];
-    // AVAudioSessionRouteDescription *newRoute = [audioSession currentRoute];
-    // NSString *newOutput = [[newRoute.outputs objectAtIndex:0] portType];
-
-    [self sendEventWithName:kEventMediaDevicesOnDeviceChange body:@{}];
+//     // Possible change reasons: AVAudioSessionRouteChangeReasonOldDeviceUnavailable AVAudioSessionRouteChangeReasonNewDeviceAvailable
+//     NSInteger changeReason = [[notification.userInfo objectForKey:AVAudioSessionRouteChangeReasonKey] integerValue];
+//     NSLog(@"[Daily] devicesChanged %zd", changeReason);
+//
+//     // AVAudioSessionRouteDescription *oldRoute = [notification.userInfo objectForKey:AVAudioSessionRouteChangePreviousRouteKey];
+//     // NSString *oldOutput = [[oldRoute.outputs objectAtIndex:0] portType];
+//     // AVAudioSessionRouteDescription *newRoute = [audioSession currentRoute];
+//     // NSString *newOutput = [[newRoute.outputs objectAtIndex:0] portType];
+//
+//     [self sendEventWithName:kEventMediaDevicesOnDeviceChange body:@{}];
 }
 
 RCT_EXPORT_METHOD(startMediaDevicesEventMonitor) {
     NSLog(@"[Daily] startMediaDevicesEventMonitor");
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(devicesChanged:) name:AVAudioSessionRouteChangeNotification object:nil];
+//     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(devicesChanged:) name:AVAudioSessionRouteChangeNotification object:nil];
 }
 
 @end
