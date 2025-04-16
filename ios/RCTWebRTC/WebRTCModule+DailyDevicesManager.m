@@ -81,6 +81,13 @@ RCT_EXPORT_METHOD(enumerateDevices:(RCTResponseSenderBlock)callback)
                          @"kind": DEVICE_KIND_AUDIO,
                          }];
 
+    [devices addObject:@{
+                         @"deviceId": USB_DEVICE_ID,
+                         @"groupId": @"",
+                         @"label": @"External Microphone",
+                         @"kind": DEVICE_KIND_AUDIO,
+                         }];
+
     if(self.hasBluetoothDevice && !self.hasWiredHeadset){
         [devices addObject:@{
                          @"deviceId": BLUETOOTH_DEVICE_ID,
@@ -172,53 +179,60 @@ RCT_EXPORT_METHOD(getAudioDevice: (RCTPromiseResolveBlock)resolve
 // https://github.com/xialin/AudioSessionManager/blob/master/AudioSessionManager.m
 RCT_EXPORT_METHOD(setAudioDevice:(NSString*)deviceId) {
     NSLog(@"[Daily] setAudioDevice: %@", deviceId);
-//
-//     [self setAudioMode: AUDIO_MODE_USER_SPECIFIED_ROUTE];
-//     self.userSelectedDevice = deviceId;
-//
-//     // Ducking other apps' audio implicitly enables allowing mixing audio with
-//     // other apps, which allows this app to stay alive in the backgrounnd during
-//     // a call (assuming it has the voip background mode set).
-//     // After iOS 16, we must also always keep the bluetooth option here, otherwise
-//     // we are not able to see the bluetooth devices on the list
-//     AVAudioSessionCategoryOptions categoryOptions = (AVAudioSessionCategoryOptionAllowBluetooth |
-//                                                      AVAudioSessionCategoryOptionMixWithOthers);
-//     NSString *mode = AVAudioSessionModeVoiceChat;
-//
-//     // Earpiece: is default route for a call.
-//     // Speaker: the speaker is the default output audio for like music, video, ring tone.
-//     // Bluetooth: whenever a bluetooth device connected, the bluetooth device will become the default audio route.
-//     // Headphones: whenever any headphones plugged in, it becomes the default audio route even there is also bluetooth device.
-//     //  And it overwrites the handset(iPhone) option, which means you cannot change to the earpiece, bluetooth.
-//     if([SPEAKERPHONE_DEVICE_ID isEqualToString: deviceId]){
-//         NSLog(@"[Daily] configuring output to SPEAKER");
-//         categoryOptions |= AVAudioSessionCategoryOptionDefaultToSpeaker;
-//         mode = AVAudioSessionModeVideoChat;
-//     }
-//
-//     AVAudioSession *audioSession = AVAudioSession.sharedInstance;
-//     [self configureAudioSession:audioSession audioMode:mode categoryOptions:categoryOptions];
-//
-//     // Force to speaker. We only need to do that the cases a wired headset is connected, but we still want to force to speaker
-//     if([SPEAKERPHONE_DEVICE_ID isEqualToString: deviceId]){
-//         [audioSession overrideOutputAudioPort: AVAudioSessionPortOverrideSpeaker error: nil];
-//     } else if([WIRED_OR_EARPIECE_DEVICE_ID isEqualToString: deviceId]){
-//         [audioSession overrideOutputAudioPort: AVAudioSessionPortOverrideNone error: nil];
-//         NSArray<AVAudioSessionPortDescription *> *availableInputs = [audioSession availableInputs];
-//         for (AVAudioSessionPortDescription *device in availableInputs) {
-//             if([self isBuiltInMic:[device portType]]){
-//                 NSLog(@"[Daily] forcing preferred input to built in device");
-//                 [audioSession setPreferredInput:device error:nil];
-//                 return;
-//             }
-//         }
-//     }
+
+    [self setAudioMode: AUDIO_MODE_USER_SPECIFIED_ROUTE];
+    self.userSelectedDevice = deviceId;
+
+    // Ducking other apps' audio implicitly enables allowing mixing audio with
+    // other apps, which allows this app to stay alive in the backgrounnd during
+    // a call (assuming it has the voip background mode set).
+    // After iOS 16, we must also always keep the bluetooth option here, otherwise
+    // we are not able to see the bluetooth devices on the list
+    AVAudioSessionCategoryOptions categoryOptions = (AVAudioSessionCategoryOptionAllowBluetooth |
+                                                     AVAudioSessionCategoryOptionMixWithOthers);
+    NSString *mode = AVAudioSessionModeVoiceChat;
+
+    // Earpiece: is default route for a call.
+    // Speaker: the speaker is the default output audio for like music, video, ring tone.
+    // Bluetooth: whenever a bluetooth device connected, the bluetooth device will become the default audio route.
+    // Headphones: whenever any headphones plugged in, it becomes the default audio route even there is also bluetooth device.
+    //  And it overwrites the handset(iPhone) option, which means you cannot change to the earpiece, bluetooth.
+    if([SPEAKERPHONE_DEVICE_ID isEqualToString: deviceId]){
+        NSLog(@"[Daily] configuring output to SPEAKER");
+        categoryOptions |= AVAudioSessionCategoryOptionDefaultToSpeaker;
+        mode = AVAudioSessionModeVideoChat;
+    } else if ([USB_DEVICE_ID isEqualToString: deviceId]) {
+        NSLog(@"[Daily] configuring output to USB Device");
+        mode = AVAudioSessionModeVideoRecording;
+    }
+
+    AVAudioSession *audioSession = AVAudioSession.sharedInstance;
+    [self configureAudioSession:audioSession audioMode:mode categoryOptions:categoryOptions];
+
+    // Force to speaker. We only need to do that the cases a wired headset is connected, but we still want to force to speaker
+    if([SPEAKERPHONE_DEVICE_ID isEqualToString: deviceId]){
+        [audioSession overrideOutputAudioPort: AVAudioSessionPortOverrideSpeaker error: nil];
+    } else if([WIRED_OR_EARPIECE_DEVICE_ID isEqualToString: deviceId]) {
+        [audioSession overrideOutputAudioPort: AVAudioSessionPortOverrideNone error: nil];
+        NSArray<AVAudioSessionPortDescription *> *availableInputs = [audioSession availableInputs];
+        for (AVAudioSessionPortDescription *device in availableInputs) {
+            if([self isBuiltInMic:[device portType]]){
+                NSLog(@"[Daily] forcing preferred input to built in device");
+                [audioSession setPreferredInput:device error:nil];
+                return;
+            }
+        }
+    } else if ([USB_DEVICE_ID isEqualToString: deviceId]) {
+        NSLog(@"[Daily] configuring output to USB Device 2");
+        [audioSession overrideOutputAudioPort: AVAudioSessionPortUSBAudio error: nil];
+    }
 }
 
 - (void)configureAudioSession:(nonnull AVAudioSession *)audioSession
               audioMode:(nonnull NSString *)mode
               categoryOptions: (AVAudioSessionCategoryOptions) categoryOptions
 {
+    NSLog(@"[Daily] configureAudioSession to %@ with options %lu", mode, (unsigned long)categoryOptions);
     // We need to set the mode before set the category, because when setting the node It can automatically change the categories.
     // This way we can enforce the categories that we want later.
     [self audioSessionSetMode:mode toSession:audioSession];
@@ -229,43 +243,43 @@ RCT_EXPORT_METHOD(setAudioDevice:(NSString*)deviceId) {
                       toSession:(AVAudioSession *)audioSession
                         options:(AVAudioSessionCategoryOptions)options
 {
-//   @try {
-//     [audioSession setCategory:audioCategory
-//                   withOptions:options
-//                         error:nil];
-//     NSLog(@"[Daily] audioSession.setCategory: %@, withOptions: %lu success", audioCategory, (unsigned long)options);
-//   } @catch (NSException *e) {
-//     NSLog(@"[Daily] audioSession.setCategory: %@, withOptions: %lu fail: %@", audioCategory, (unsigned long)options, e.reason);
-//   }
+  @try {
+    [audioSession setCategory:audioCategory
+                  withOptions:options
+                        error:nil];
+    NSLog(@"[Daily] audioSession.setCategory: %@, withOptions: %lu success", audioCategory, (unsigned long)options);
+  } @catch (NSException *e) {
+    NSLog(@"[Daily] audioSession.setCategory: %@, withOptions: %lu fail: %@", audioCategory, (unsigned long)options, e.reason);
+  }
 }
 
 - (void)audioSessionSetMode:(NSString *)audioMode
                   toSession:(AVAudioSession *)audioSession
 {
-//   @try {
-//     [audioSession setMode:audioMode error:nil];
-//     NSLog(@"[Daily] audioSession.setMode(%@) success", audioMode);
-//   } @catch (NSException *e) {
-//     NSLog(@"[Daily] audioSession.setMode(%@) fail: %@", audioMode, e.reason);
-//   }
+  @try {
+    [audioSession setMode:audioMode error:nil];
+    NSLog(@"[Daily] audioSession.setMode(%@) success", audioMode);
+  } @catch (NSException *e) {
+    NSLog(@"[Daily] audioSession.setMode(%@) fail: %@", audioMode, e.reason);
+  }
 }
 
 - (void)devicesChanged:(NSNotification *)notification {
-//     // Possible change reasons: AVAudioSessionRouteChangeReasonOldDeviceUnavailable AVAudioSessionRouteChangeReasonNewDeviceAvailable
-//     NSInteger changeReason = [[notification.userInfo objectForKey:AVAudioSessionRouteChangeReasonKey] integerValue];
-//     NSLog(@"[Daily] devicesChanged %zd", changeReason);
-//
-//     // AVAudioSessionRouteDescription *oldRoute = [notification.userInfo objectForKey:AVAudioSessionRouteChangePreviousRouteKey];
-//     // NSString *oldOutput = [[oldRoute.outputs objectAtIndex:0] portType];
-//     // AVAudioSessionRouteDescription *newRoute = [audioSession currentRoute];
-//     // NSString *newOutput = [[newRoute.outputs objectAtIndex:0] portType];
-//
-//     [self sendEventWithName:kEventMediaDevicesOnDeviceChange body:@{}];
+    // Possible change reasons: AVAudioSessionRouteChangeReasonOldDeviceUnavailable AVAudioSessionRouteChangeReasonNewDeviceAvailable
+    NSInteger changeReason = [[notification.userInfo objectForKey:AVAudioSessionRouteChangeReasonKey] integerValue];
+    NSLog(@"[Daily] devicesChanged %zd", changeReason);
+
+    // AVAudioSessionRouteDescription *oldRoute = [notification.userInfo objectForKey:AVAudioSessionRouteChangePreviousRouteKey];
+    // NSString *oldOutput = [[oldRoute.outputs objectAtIndex:0] portType];
+    // AVAudioSessionRouteDescription *newRoute = [audioSession currentRoute];
+    // NSString *newOutput = [[newRoute.outputs objectAtIndex:0] portType];
+
+    [self sendEventWithName:kEventMediaDevicesOnDeviceChange body:@{}];
 }
 
 RCT_EXPORT_METHOD(startMediaDevicesEventMonitor) {
     NSLog(@"[Daily] startMediaDevicesEventMonitor");
-//     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(devicesChanged:) name:AVAudioSessionRouteChangeNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(devicesChanged:) name:AVAudioSessionRouteChangeNotification object:nil];
 }
 
 @end
