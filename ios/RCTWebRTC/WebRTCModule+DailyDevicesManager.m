@@ -14,6 +14,14 @@
 
 static NSString const *DEVICE_KIND_VIDEO_INPUT = @"videoinput";
 static NSString const *DEVICE_KIND_AUDIO = @"audio";
+BOOL _isAudioSessionRouteChangeRegistered = NO;
+BOOL _isAudioSessionInterruptionRegistered = NO;
+BOOL _isAudioSessionMediaServicesWereLostRegistered = NO;
+BOOL _isAudioSessionMediaServicesWereResetRegistered = NO;
+id _audioSessionRouteChangeObserver = nil;
+id _audioSessionInterruptionObserver = nil;
+id _audioSessionMediaServicesWereLostObserver = nil;
+id _audioSessionMediaServicesWereResetObserver = nil;
 
 - (void)setUserSelectedDevice:(NSString *)userSelectedDevice {
   objc_setAssociatedObject(self,
@@ -88,7 +96,7 @@ RCT_EXPORT_METHOD(enumerateDevices:(RCTResponseSenderBlock)callback)
                          @"kind": DEVICE_KIND_AUDIO,
                          }];
 
-    if(self.hasBluetoothDevice && !self.hasWiredHeadset){
+    if(!self.hasWiredHeadset){
         [devices addObject:@{
                          @"deviceId": BLUETOOTH_DEVICE_ID,
                          @"groupId": @"",
@@ -140,6 +148,10 @@ RCT_EXPORT_METHOD(enumerateDevices:(RCTResponseSenderBlock)callback)
     return isBluetooth;
 }
 
+- (BOOL)isUSBDevice:(NSString*)portType {
+    return [portType isEqualToString:AVAudioSessionPortUSBAudio];
+}
+
 - (BOOL)isBuiltInSpeaker:(NSString*)portType {
     return [portType isEqualToString:AVAudioSessionPortBuiltInSpeaker];
 }
@@ -154,7 +166,6 @@ RCT_EXPORT_METHOD(enumerateDevices:(RCTResponseSenderBlock)callback)
     return ([portType isEqualToString:AVAudioSessionPortBuiltInMic]);
 }
 
-
 RCT_EXPORT_METHOD(getAudioDevice: (RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
     NSLog(@"[Daily] getAudioDevice");
@@ -163,7 +174,9 @@ RCT_EXPORT_METHOD(getAudioDevice: (RCTPromiseResolveBlock)resolve
     if([currentRoutes count] > 0){
         NSString* currentPortType = [currentRoutes[0] portType];
         NSLog(@"[Daily] currentPortType: %@", currentPortType);
-        if([self isBluetoothDevice:currentPortType]){
+        if ([self isUSBDevice:currentPortType]) {
+            return resolve(USB_DEVICE_ID);
+        } else if([self isBluetoothDevice:currentPortType]){
             return resolve(BLUETOOTH_DEVICE_ID);
         } else if([self isBuiltInSpeaker:currentPortType]){
             return resolve(SPEAKERPHONE_DEVICE_ID);
@@ -200,7 +213,7 @@ RCT_EXPORT_METHOD(setAudioDevice:(NSString*)deviceId) {
     if([SPEAKERPHONE_DEVICE_ID isEqualToString: deviceId]){
         NSLog(@"[Daily] configuring output to SPEAKER");
         categoryOptions |= AVAudioSessionCategoryOptionDefaultToSpeaker;
-        mode = AVAudioSessionModeVideoChat;
+        mode = AVAudioSessionModeDefault;
     } else if ([USB_DEVICE_ID isEqualToString: deviceId]) {
         NSLog(@"[Daily] configuring output to USB Device");
         mode = AVAudioSessionModeVideoRecording;
@@ -222,10 +235,11 @@ RCT_EXPORT_METHOD(setAudioDevice:(NSString*)deviceId) {
                 return;
             }
         }
-    } else if ([USB_DEVICE_ID isEqualToString: deviceId]) {
-        NSLog(@"[Daily] configuring output to USB Device 2");
-        [audioSession overrideOutputAudioPort: AVAudioSessionPortUSBAudio error: nil];
     }
+//      else if ([USB_DEVICE_ID isEqualToString: deviceId]) {
+//         NSLog(@"[Daily] configuring output to USB Device 2");
+//         [audioSession overrideOutputAudioPort: AVAudioSessionPortUSBAudio error: nil];
+//     }
 }
 
 - (void)configureAudioSession:(nonnull AVAudioSession *)audioSession
@@ -236,7 +250,12 @@ RCT_EXPORT_METHOD(setAudioDevice:(NSString*)deviceId) {
     // We need to set the mode before set the category, because when setting the node It can automatically change the categories.
     // This way we can enforce the categories that we want later.
     [self audioSessionSetMode:mode toSession:audioSession];
-    [self audioSessionSetCategory:AVAudioSessionCategoryPlayAndRecord toSession:audioSession options:categoryOptions];
+    if ([mode isEqualToString: AVAudioSessionModeVideoRecording]) {
+        [audioSession overrideOutputAudioPort: AVAudioSessionPortUSBAudio error: nil];
+        [self audioSessionSetCategory:AVAudioSessionCategoryRecord toSession:audioSession options:categoryOptions];
+    } else {
+        [self audioSessionSetCategory:AVAudioSessionCategoryPlayAndRecord toSession:audioSession options:categoryOptions];
+    }
 }
 
 - (void)audioSessionSetCategory:(NSString *)audioCategory
@@ -266,8 +285,8 @@ RCT_EXPORT_METHOD(setAudioDevice:(NSString*)deviceId) {
 
 - (void)devicesChanged:(NSNotification *)notification {
     // Possible change reasons: AVAudioSessionRouteChangeReasonOldDeviceUnavailable AVAudioSessionRouteChangeReasonNewDeviceAvailable
-    NSInteger changeReason = [[notification.userInfo objectForKey:AVAudioSessionRouteChangeReasonKey] integerValue];
-    NSLog(@"[Daily] devicesChanged %zd", changeReason);
+    // NSNumber *routeChangeType = [notification.userInfo objectForKey:@"AVAudioSessionRouteChangeReasonKey"];
+    // NSUInteger routeChangeTypeValue = [routeChangeType unsignedIntegerValue];
 
     // AVAudioSessionRouteDescription *oldRoute = [notification.userInfo objectForKey:AVAudioSessionRouteChangePreviousRouteKey];
     // NSString *oldOutput = [[oldRoute.outputs objectAtIndex:0] portType];
@@ -277,9 +296,181 @@ RCT_EXPORT_METHOD(setAudioDevice:(NSString*)deviceId) {
     [self sendEventWithName:kEventMediaDevicesOnDeviceChange body:@{}];
 }
 
+- (id)startObserve:(NSString *)name
+            object:(id)object
+             queue:(NSOperationQueue *)queue
+             block:(void (^)(NSNotification *))block
+{
+    return [[NSNotificationCenter defaultCenter] addObserverForName:name
+                                               object:object
+                                                queue:queue
+                                           usingBlock:block];
+}
+
+- (void)stopObserve:(id)observer
+             name:(NSString *)name
+           object:(id)object
+{
+    if (observer == nil) return;
+    [[NSNotificationCenter defaultCenter] removeObserver:observer
+                                                    name:name
+                                                  object:object];
+}
+
+- (void)startAudioSessionRouteChangeNotification
+{
+
+        if (_isAudioSessionRouteChangeRegistered) {
+            return;
+        }
+        NSLog(@"[Daily].startAudioSessionRouteChangeNotification()");
+
+        // --- in case it didn't deallocate when ViewDidUnload
+        [self stopObserve:_audioSessionRouteChangeObserver
+                     name: AVAudioSessionRouteChangeNotification
+                   object: nil];
+
+        _audioSessionRouteChangeObserver = [self startObserve:AVAudioSessionRouteChangeNotification
+                                                       object: nil
+                                                        queue: nil
+                                                        block:^(NSNotification *notification) {
+            if (notification.userInfo == nil
+                || ![notification.name isEqualToString:AVAudioSessionRouteChangeNotification]) {
+                // NSLog(@"[Daily]===============%@", notification);
+                return;
+            }
+
+            NSNumber *routeChangeType = [notification.userInfo objectForKey:@"AVAudioSessionRouteChangeReasonKey"];
+            NSUInteger routeChangeTypeValue = [routeChangeType unsignedIntegerValue];
+
+            // NSLog(@"[Daily]=======================%@", notification);
+            switch (routeChangeTypeValue) {
+                case AVAudioSessionRouteChangeReasonUnknown:
+                    NSLog(@"[Daily].AudioRouteChange.Reason: Unknown");
+                    break;
+                case AVAudioSessionRouteChangeReasonNewDeviceAvailable:
+                    NSLog(@"[Daily].AudioRouteChange.Reason----: NewDeviceAvailable");
+
+                    break;
+                case AVAudioSessionRouteChangeReasonOldDeviceUnavailable:
+                    NSLog(@"[Daily].AudioRouteChange.Reason----: OldDeviceUnavailable");
+                    break;
+                case AVAudioSessionRouteChangeReasonCategoryChange:
+                    NSLog(@"[Daily].AudioRouteChange.Reason: AVAudioSessionRouteChangeReasonCategoryChange");
+                    break;
+                case AVAudioSessionRouteChangeReasonOverride:
+                    NSLog(@"[Daily].AudioRouteChange.Reason: Override");
+                    break;
+                case AVAudioSessionRouteChangeReasonWakeFromSleep:
+                    NSLog(@"[Daily].AudioRouteChange.Reason: WakeFromSleep");
+                    break;
+                case AVAudioSessionRouteChangeReasonNoSuitableRouteForCategory:
+                    NSLog(@"[Daily].AudioRouteChange.Reason: NoSuitableRouteForCategory");
+                    break;
+                case AVAudioSessionRouteChangeReasonRouteConfigurationChange:
+                    NSLog(@"[Daily].AudioRouteChange.Reason: AVAudioSessionRouteChangeReasonRouteConfigurationChange");
+                    break;
+                default:
+                    NSLog(@"[Daily].AudioRouteChange.Reason: Unknown Value");
+                    break;
+            };
+        }];
+
+        _isAudioSessionRouteChangeRegistered = YES;
+}
+
+- (void)startAudioSessionInterruptionNotification
+{
+    if (_isAudioSessionInterruptionRegistered) {
+        return;
+    }
+    NSLog(@"[Daily].startAudioSessionInterruptionNotification()");
+
+    // --- in case it didn't deallocate when ViewDidUnload
+    [self stopObserve:_audioSessionInterruptionObserver
+                 name:AVAudioSessionInterruptionNotification
+               object:nil];
+
+    _audioSessionInterruptionObserver = [self startObserve:AVAudioSessionInterruptionNotification
+                                                    object:nil
+                                                     queue:nil
+                                                     block:^(NSNotification *notification) {
+        if (notification.userInfo == nil
+                || ![notification.name isEqualToString:AVAudioSessionInterruptionNotification]) {
+            return;
+        }
+
+        //NSUInteger rawValue = notification.userInfo[AVAudioSessionInterruptionTypeKey].unsignedIntegerValue;
+        NSNumber *interruptType = [notification.userInfo objectForKey:@"AVAudioSessionInterruptionTypeKey"];
+        if ([interruptType unsignedIntegerValue] == AVAudioSessionInterruptionTypeBegan) {
+            NSLog(@"[Daily].AudioSessionInterruptionNotification: Began");
+        } else if ([interruptType unsignedIntegerValue] == AVAudioSessionInterruptionTypeEnded) {
+            NSLog(@"[Daily].AudioSessionInterruptionNotification: Ended");
+        } else {
+            NSLog(@"[Daily].AudioSessionInterruptionNotification: Unknown Value");
+        }
+        //NSLog(@"[Daily].AudioSessionInterruptionNotification: could not resolve notification");
+    }];
+
+    _isAudioSessionInterruptionRegistered = YES;
+}
+
+- (void)startAudioSessionMediaServicesWereLostNotification
+{
+    if (_isAudioSessionMediaServicesWereLostRegistered) {
+        return;
+    }
+
+    NSLog(@"[Daily].startAudioSessionMediaServicesWereLostNotification()");
+
+    // --- in case it didn't deallocate when ViewDidUnload
+    [self stopObserve:_audioSessionMediaServicesWereLostObserver
+                 name:AVAudioSessionMediaServicesWereLostNotification
+               object:nil];
+
+    _audioSessionMediaServicesWereLostObserver = [self startObserve:AVAudioSessionMediaServicesWereLostNotification
+                                                             object:nil
+                                                              queue:nil
+                                                              block:^(NSNotification *notification) {
+        // --- This notification has no userInfo dictionary.
+        NSLog(@"[Daily].AudioSessionMediaServicesWereLostNotification: Media Services Were Lost");
+    }];
+
+    _isAudioSessionMediaServicesWereLostRegistered = YES;
+}
+
+- (void)startAudioSessionMediaServicesWereResetNotification
+{
+    if (_isAudioSessionMediaServicesWereResetRegistered) {
+        return;
+    }
+
+    NSLog(@"[Daily].startAudioSessionMediaServicesWereResetNotification()");
+
+    // --- in case it didn't deallocate when ViewDidUnload
+    [self stopObserve:_audioSessionMediaServicesWereResetObserver
+                 name:AVAudioSessionMediaServicesWereResetNotification
+               object:nil];
+
+    _audioSessionMediaServicesWereResetObserver = [self startObserve:AVAudioSessionMediaServicesWereResetNotification
+                                                              object:nil
+                                                               queue:nil
+                                                               block:^(NSNotification *notification) {
+        // --- This notification has no userInfo dictionary.
+        NSLog(@"[Daily].AudioSessionMediaServicesWereResetNotification: Media Services Were Reset");
+    }];
+
+    _isAudioSessionMediaServicesWereResetRegistered = YES;
+}
+
 RCT_EXPORT_METHOD(startMediaDevicesEventMonitor) {
     NSLog(@"[Daily] startMediaDevicesEventMonitor");
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(devicesChanged:) name:AVAudioSessionRouteChangeNotification object:nil];
+
+    // [self startAudioSessionRouteChangeNotification];
+    // [self startAudioSessionInterruptionNotification];
+    // [self startAudioSessionMediaServicesWereLostNotification];
+    // [self startAudioSessionMediaServicesWereResetNotification];
 }
 
 @end
