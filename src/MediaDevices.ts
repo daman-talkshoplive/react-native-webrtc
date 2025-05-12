@@ -1,7 +1,7 @@
 import { EventTarget, Event, defineEventAttribute } from 'event-target-shim';
 import { NativeModules } from 'react-native';
 
-import { addListener } from './EventEmitter';
+import { addListener, removeListener } from './EventEmitter';
 import getDisplayMedia from './getDisplayMedia';
 import getUserMedia from './getUserMedia';
 
@@ -54,6 +54,12 @@ class MediaDevices extends EventTarget<MediaDevicesEventMap> {
             // @ts-ignore
             this.dispatchEvent(new Event('devicechange'));
         });
+    }
+
+    _unregisterEvents(): void {
+        console.log('MediaDevices _unregisterEvents invoked');
+        WebRTCModule.stopMediaDevicesEventMonitor();
+        removeListener(this);
     }
 }
 
