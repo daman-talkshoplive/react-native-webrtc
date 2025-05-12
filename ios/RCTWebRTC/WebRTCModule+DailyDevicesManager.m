@@ -470,17 +470,17 @@ RCT_EXPORT_METHOD(startMediaDevicesEventMonitor) {
 
 RCT_EXPORT_METHOD(stopMediaDevicesEventMonitor) {
     NSLog(@"[Daily] stopMediaDevicesEventMonitor");
-//     [[NSNotificationCenter defaultCenter] removeObserver:self name:AVAudioSessionRouteChangeNotification object:nil];
-//
-//     // Reset all related variables to their initial states
-//     _isAudioSessionRouteChangeRegistered = NO;
-//     _audioSessionRouteChangeObserver = nil;
-//     _isAudioSessionInterruptionRegistered = NO;
-//     _audioSessionInterruptionObserver = nil;
-//     _isAudioSessionMediaServicesWereLostRegistered = NO;
-//     _audioSessionMediaServicesWereLostObserver = nil;
-//     _isAudioSessionMediaServicesWereResetRegistered = NO;
-//     _audioSessionMediaServicesWereResetObserver = nil;
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:AVAudioSessionRouteChangeNotification object:nil];
+
+    // Reset all related variables to their initial states
+    _isAudioSessionRouteChangeRegistered = NO;
+    _audioSessionRouteChangeObserver = nil;
+    _isAudioSessionInterruptionRegistered = NO;
+    _audioSessionInterruptionObserver = nil;
+    _isAudioSessionMediaServicesWereLostRegistered = NO;
+    _audioSessionMediaServicesWereLostObserver = nil;
+    _isAudioSessionMediaServicesWereResetRegistered = NO;
+    _audioSessionMediaServicesWereResetObserver = nil;
 }
 
 @end
