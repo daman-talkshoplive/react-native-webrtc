@@ -1,5 +1,5 @@
 import { EventTarget, Event, defineEventAttribute } from 'event-target-shim';
-import { NativeModules } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 
 import { addListener, removeListener } from './EventEmitter';
 import getDisplayMedia from './getDisplayMedia';
@@ -48,7 +48,9 @@ class MediaDevices extends EventTarget<MediaDevicesEventMap> {
 
     _registerEvents(): void {
         console.log('MediaDevices _registerEvents invoked');
-        WebRTCModule.startMediaDevicesEventMonitor();
+        if (Platform.OS === 'ios') {
+            WebRTCModule.startMediaDevicesEventMonitor();
+        }
         addListener(this,'mediaDevicesOnDeviceChange', () => {
             console.log('MediaDevices => mediaDevicesOnDeviceChange');
             // @ts-ignore
@@ -58,7 +60,9 @@ class MediaDevices extends EventTarget<MediaDevicesEventMap> {
 
     _unregisterEvents(): void {
         console.log('MediaDevices _unregisterEvents invoked');
-        WebRTCModule.stopMediaDevicesEventMonitor();
+        if (Platform.OS === 'ios') {
+            WebRTCModule.stopMediaDevicesEventMonitor();
+        }
         removeListener(this);
     }
 }
