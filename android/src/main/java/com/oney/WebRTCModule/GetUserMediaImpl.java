@@ -89,7 +89,11 @@ class GetUserMediaImpl {
                     }
 
                     mediaProjectionPermissionResultData = data;
-                    createScreenStream();
+
+                    ThreadUtils.runOnExecutor(() -> {
+                        MediaProjectionService.launch(activity);
+                        createScreenStream();
+                    });
                 }
             }
         });
@@ -233,11 +237,22 @@ class GetUserMediaImpl {
         }
     }
 
-    void switchCamera(String trackId) {
+    void switchCamera(String trackId, CameraCaptureController.SwitchCameraHandler handler) throws Exception {
         TrackPrivate track = tracks.get(trackId);
         if (track != null && track.videoCaptureController instanceof CameraCaptureController) {
             CameraCaptureController cameraCaptureController = (CameraCaptureController) track.videoCaptureController;
-            cameraCaptureController.switchCamera();
+            cameraCaptureController.switchCamera(handler);
+        }
+    }
+
+    String getCameraFacingMode(String trackId) throws Exception {
+        TrackPrivate track = tracks.get(trackId);
+        if (track != null && track.videoCaptureController instanceof CameraCaptureController) {
+            CameraCaptureController cameraCaptureController = (CameraCaptureController) track.videoCaptureController;
+            return cameraCaptureController.facingMode();
+        }
+        else {
+            throw new Exception("Track not found when attempting to get camera facing mode");
         }
     }
 
@@ -321,7 +336,7 @@ class GetUserMediaImpl {
             trackInfo.putBoolean("enabled", track.enabled());
             trackInfo.putString("id", trackId);
             trackInfo.putString("kind", track.kind());
-            trackInfo.putString("readyState", track.state().toString().toLowerCase());
+            trackInfo.putString("readyState", "live");
             trackInfo.putBoolean("remote", false);
 
             if (track instanceof VideoTrack) {
@@ -488,7 +503,5 @@ class GetUserMediaImpl {
         }
     }
 
-    public interface BiConsumer<T, U> {
-        void accept(T t, U u);
-    }
+    public interface BiConsumer<T, U> { void accept(T t, U u); }
 }

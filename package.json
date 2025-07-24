@@ -1,11 +1,14 @@
 {
   "name": "react-native-webrtc",
-  "version": "118.0.2",
+  "version": "118.0.3-daily.4",
   "repository": {
     "type": "git",
-    "url": "git@github.com:daman-talkshoplive/react-native-webrtc.git"
+    "url": "git@github.com:daman-talkshoplive/react-native-webrtc.git",
+    "fork": "https://github.com/daily-co/react-native-webrtc/commits/main/",
+    "forkLastCommit": "2c5055f"
   },
-  "description": "WebRTC for React Native",
+  "nativePackage": true,
+  "description": "Daily fork of WebRTC for React Native",
   "license": "MIT",
   "homepage": "https://github.com/daman-talkshoplive/react-native-webrtc",
   "keywords": [
@@ -15,9 +18,8 @@
     "android",
     "webrtc"
   ],
-  "scripts": {},
   "react-native": "src/index.ts",
-  "types": "lib/typescript/index.d.ts",
+  "types": "./index.d.ts",
   "main": "lib/commonjs/index.js",
   "module": "lib/module/index.js",
   "dependencies": {
@@ -28,13 +30,14 @@
   "peerDependencies": {
     "react-native": ">=0.60.0"
   },
+  "scripts": {},
   "bugs": {
-    "url": "https://github.com/react-native-webrtc/react-native-webrtc/issues"
+    "url": "https://github.com/daily-co/react-native-webrtc/issues"
   },
   "devDependencies": {
     "@types/debug": "4.1.7",
-    "@types/react": "17.0.40",
-    "@types/react-native": "0.67.3",
+    "@types/react": "19.0.9",
+    "@types/react-native": "0.73.0",
     "@typescript-eslint/eslint-plugin": "^5.39.0",
     "@typescript-eslint/parser": "^5.39.0",
     "eslint": "^8.24.0",
@@ -42,8 +45,8 @@
     "husky": "7.0.2",
     "lint-staged": "11.2.3",
     "prettier": "2.4.1",
-    "react-native-builder-bob": "0.18.2",
-    "typescript": "4.6.2"
+    "react-native-builder-bob": "0.39.1",
+    "typescript": "5.8.3"
   },
   "lint-staged": {
     "**/*": "prettier --write --ignore-unknown"

@@ -107,7 +107,7 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
             throw new Error('Only implemented for video tracks');
         }
 
-        WebRTCModule.mediaStreamTrackSwitchCamera(this.id);
+        return WebRTCModule.mediaStreamTrackSwitchCamera(this.id);
     }
 
     /**

@@ -1,7 +1,7 @@
 import { EventTarget, Event, defineEventAttribute } from 'event-target-shim';
-import { NativeModules, Platform } from 'react-native';
+import { NativeModules } from 'react-native';
 
-import { addListener, removeListener } from './EventEmitter';
+import { addListener } from './EventEmitter';
 import getDisplayMedia from './getDisplayMedia';
 import getUserMedia from './getUserMedia';
 
@@ -13,9 +13,10 @@ type MediaDevicesEventMap = {
 
 class MediaDevices extends EventTarget<MediaDevicesEventMap> {
     constructor() {
-        super();
-        this._registerEvents();
+      super();
+      this._registerEvents();
     }
+
     /**
      * W3C "Media Capture and Streams" compatible {@code enumerateDevices}
      * implementation.
@@ -48,22 +49,12 @@ class MediaDevices extends EventTarget<MediaDevicesEventMap> {
 
     _registerEvents(): void {
         console.log('MediaDevices _registerEvents invoked');
-        if (Platform.OS === 'ios') {
-            WebRTCModule.startMediaDevicesEventMonitor();
-        }
+        WebRTCModule.startMediaDevicesEventMonitor();
         addListener(this,'mediaDevicesOnDeviceChange', () => {
             console.log('MediaDevices => mediaDevicesOnDeviceChange');
             // @ts-ignore
-            this.dispatchEvent(new Event('devicechange'));
+            this.dispatchEvent(new RTCEvent('devicechange'));
         });
-    }
-
-    _unregisterEvents(): void {
-        console.log('MediaDevices _unregisterEvents invoked');
-        if (Platform.OS === 'ios') {
-            WebRTCModule.stopMediaDevicesEventMonitor();
-        }
-        removeListener(this);
     }
 }
 

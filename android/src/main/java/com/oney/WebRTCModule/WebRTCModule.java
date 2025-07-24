@@ -1,6 +1,7 @@
 package com.oney.WebRTCModule;
 
 import android.util.Log;
+import android.util.Pair;
 import android.util.SparseArray;
 
 import androidx.annotation.NonNull;
@@ -49,6 +50,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     final Map<String, MediaStream> localStreams;
 
     private final GetUserMediaImpl getUserMediaImpl;
+    private final DailyWebRTCDevicesManager dailyWebRTCDevicesManager;
 
     public WebRTCModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -107,6 +109,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         mAudioDeviceModule = adm;
 
         getUserMediaImpl = new GetUserMediaImpl(this, reactContext);
+        dailyWebRTCDevicesManager = new DailyWebRTCDevicesManager(this, reactContext);
     }
 
     @NonNull
@@ -709,6 +712,68 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         });
     }
 
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    public void transceiverSetCodecPreferences(int id, String senderId, ReadableArray codecPreferences) {
+        ThreadUtils.runOnExecutor(() -> {
+            WritableMap identifier = Arguments.createMap();
+            WritableMap params = Arguments.createMap();
+            identifier.putInt("peerConnectionId", id);
+            identifier.putString("transceiverId", senderId);
+            try {
+                PeerConnectionObserver pco = mPeerConnectionObservers.get(id);
+                if (pco == null) {
+                    Log.d(TAG, "transceiverSetDirection() peerConnectionObserver is null");
+                    return;
+                }
+                RtpTransceiver transceiver = pco.getTransceiver(senderId);
+                if (transceiver == null) {
+                    Log.d(TAG, "transceiverSetDirection() transceiver is null");
+                    return;
+                }
+
+                // Convert JSON codec capabilities to the actual objects.
+                RtpTransceiver.RtpTransceiverDirection direction = transceiver.getDirection();
+                List<Pair<Map<String, Object>, RtpCapabilities.CodecCapability>> availableCodecs = new ArrayList<>();
+
+                if (direction.equals(RtpTransceiver.RtpTransceiverDirection.SEND_RECV)
+                        || direction.equals(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY)) {
+                    RtpCapabilities capabilities = mFactory.getRtpSenderCapabilities(transceiver.getMediaType());
+                    for (RtpCapabilities.CodecCapability codec : capabilities.codecs) {
+                        Map<String, Object> codecDict = SerializeUtils.serializeRtpCapabilitiesCodec(codec).toHashMap();
+                        availableCodecs.add(new Pair<>(codecDict, codec));
+                    }
+                }
+
+                if (direction.equals(RtpTransceiver.RtpTransceiverDirection.SEND_RECV)
+                        || direction.equals(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)) {
+                    RtpCapabilities capabilities = mFactory.getRtpReceiverCapabilities(transceiver.getMediaType());
+                    for (RtpCapabilities.CodecCapability codec : capabilities.codecs) {
+                        Map<String, Object> codecDict = SerializeUtils.serializeRtpCapabilitiesCodec(codec).toHashMap();
+                        availableCodecs.add(new Pair<>(codecDict, codec));
+                    }
+                }
+
+                // Codec preferences is order sensitive.
+                List<RtpCapabilities.CodecCapability> codecsToSet = new ArrayList<>();
+
+                for (int i = 0; i < codecPreferences.size(); i++) {
+                    Map<String, Object> codecPref = codecPreferences.getMap(i).toHashMap();
+                    for (Pair<Map<String, Object>, RtpCapabilities.CodecCapability> pair : availableCodecs) {
+                        Map<String, Object> availableCodecDict = pair.first;
+                        if (codecPref.equals(availableCodecDict)) {
+                            codecsToSet.add(pair.second);
+                            break;
+                        }
+                    }
+                }
+
+                transceiver.setCodecPreferences(codecsToSet);
+            } catch (Exception e) {
+                Log.d(TAG, "transceiverSetCodecPreferences(): " + e.getMessage());
+            }
+        });
+    }
+
     @ReactMethod
     public void getDisplayMedia(Promise promise) {
         ThreadUtils.runOnExecutor(() -> getUserMediaImpl.getDisplayMedia(promise));
@@ -721,7 +786,10 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void enumerateDevices(Callback callback) {
-        ThreadUtils.runOnExecutor(() -> callback.invoke(getUserMediaImpl.enumerateDevices()));
+        /*ThreadUtils.runOnExecutor(() ->
+            callback.invoke(getUserMediaImpl.enumerateDevices()));*/
+        ThreadUtils.runOnExecutor(() ->
+                callback.invoke(dailyWebRTCDevicesManager.enumerateDevices()));
     }
 
     @ReactMethod
@@ -823,12 +891,47 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         });
     }
 
+    private static final String SWITCH_CAMERA_ERROR = "SWITCH_CAMERA_ERROR";
+
     @ReactMethod
-    public void mediaStreamTrackSwitchCamera(String id) {
+    public void mediaStreamTrackSwitchCamera(String id, Promise promise) {
         ThreadUtils.runOnExecutor(() -> {
             MediaStreamTrack track = getLocalTrack(id);
             if (track != null) {
-                getUserMediaImpl.switchCamera(id);
+                try {
+                    getUserMediaImpl.switchCamera(id, new CameraCaptureController.SwitchCameraHandler() {
+                        @Override
+                        public void onSwitchCameraDone(String facingMode) {
+                            promise.resolve(facingMode);
+                        }
+                    });
+                }
+                catch (Exception e) {
+                    promise.reject(SWITCH_CAMERA_ERROR, e);
+                }
+            }
+            else {
+                promise.reject(SWITCH_CAMERA_ERROR, "Local track not found when attempting to switch camera");
+            }
+        });
+    }
+
+    private static final String GET_CAMERA_FACING_MODE_ERROR = "GET_CAMERA_FACING_MODE_ERROR";
+
+    @ReactMethod
+    public void mediaStreamTrackGetCameraFacingMode(String id, Promise promise) {
+        ThreadUtils.runOnExecutor(() -> {
+            MediaStreamTrack track = getLocalTrack(id);
+            if (track != null) {
+                try {
+                    promise.resolve(getUserMediaImpl.getCameraFacingMode(id));
+                }
+                catch (Exception e) {
+                    promise.reject(GET_CAMERA_FACING_MODE_ERROR, e);
+                }
+            }
+            else {
+                promise.reject(GET_CAMERA_FACING_MODE_ERROR, "Local track not found when attempting to get camera facing mode");
             }
         });
     }
@@ -1129,18 +1232,21 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod(isBlockingSynchronousMethod = true)
-    public WritableMap receiverGetCapabilities() {
+    public WritableMap receiverGetCapabilities(String kind) {
         try {
             return (WritableMap) ThreadUtils
                     .submitToExecutor((Callable<Object>) () -> {
-                        VideoCodecInfo[] videoCodecInfos = mVideoDecoderFactory.getSupportedCodecs();
-                        WritableMap params = Arguments.createMap();
-                        WritableArray codecs = Arguments.createArray();
-                        for (VideoCodecInfo codecInfo : videoCodecInfos) {
-                            codecs.pushMap(SerializeUtils.serializeVideoCodecInfo(codecInfo));
+                        MediaStreamTrack.MediaType mediaType;
+                        if (kind.equals("audio")) {
+                            mediaType = MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO;
+                        } else if (kind.equals("video")) {
+                            mediaType = MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO;
+                        } else {
+                            return Arguments.createMap();
                         }
-                        params.putArray("codecs", codecs);
-                        return params;
+
+                        RtpCapabilities capabilities = mFactory.getRtpReceiverCapabilities(mediaType);
+                        return SerializeUtils.serializeRtpCapabilities(capabilities);
                     })
                     .get();
         } catch (ExecutionException | InterruptedException e) {
@@ -1150,18 +1256,21 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod(isBlockingSynchronousMethod = true)
-    public WritableMap senderGetCapabilities() {
+    public WritableMap senderGetCapabilities(String kind) {
         try {
             return (WritableMap) ThreadUtils
                     .submitToExecutor((Callable<Object>) () -> {
-                        VideoCodecInfo[] videoCodecInfos = mVideoEncoderFactory.getSupportedCodecs();
-                        WritableMap params = Arguments.createMap();
-                        WritableArray codecs = Arguments.createArray();
-                        for (VideoCodecInfo codecInfo : videoCodecInfos) {
-                            codecs.pushMap(SerializeUtils.serializeVideoCodecInfo(codecInfo));
+                        MediaStreamTrack.MediaType mediaType;
+                        if (kind.equals("audio")) {
+                            mediaType = MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO;
+                        } else if (kind.equals("video")) {
+                            mediaType = MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO;
+                        } else {
+                            return Arguments.createMap();
                         }
-                        params.putArray("codecs", codecs);
-                        return params;
+
+                        RtpCapabilities capabilities = mFactory.getRtpSenderCapabilities(mediaType);
+                        return SerializeUtils.serializeRtpCapabilities(capabilities);
                     })
                     .get();
         } catch (ExecutionException | InterruptedException e) {
@@ -1175,22 +1284,23 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         ThreadUtils.runOnExecutor(() -> {
             PeerConnectionObserver pco = mPeerConnectionObservers.get(pcId);
             if (pco == null || pco.getPeerConnection() == null) {
-                Log.d(TAG, "peerConnectionGetStats() peerConnection is null");
+                Log.d(TAG, "receiverGetStats() peerConnection is null");
                 promise.reject(new Exception("PeerConnection ID not found"));
             } else {
-                pco.getFilteredStats(receiverId, true, promise);
+                pco.receiverGetStats(receiverId, promise);
             }
         });
     }
+
     @ReactMethod
     public void senderGetStats(int pcId, String senderId, Promise promise) {
         ThreadUtils.runOnExecutor(() -> {
             PeerConnectionObserver pco = mPeerConnectionObservers.get(pcId);
             if (pco == null || pco.getPeerConnection() == null) {
-                Log.d(TAG, "peerConnectionGetStats() peerConnection is null");
+                Log.d(TAG, "senderGetStats() peerConnection is null");
                 promise.reject(new Exception("PeerConnection ID not found"));
             } else {
-                pco.getFilteredStats(senderId, false, promise);
+                pco.senderGetStats(senderId, promise);
             }
         });
     }
@@ -1355,5 +1465,59 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void removeListeners(Integer count) {
         // Keep: Required for RN built in Event Emitter Calls.
+    }
+
+    /// Daily-specific functionality
+
+    private  DailyAudioManager dailyAudioManager;
+
+    @ReactMethod
+    public void setAudioDevice(String deviceId) {
+        ThreadUtils.runOnExecutor(() -> {
+            this.dailyWebRTCDevicesManager.setAudioDevice(deviceId);
+            // changing the audio mode so Daily won't automatically affect anymore to change the desired audio route
+            if(this.dailyAudioManager != null){
+                this.dailyAudioManager.setMode(DailyAudioManager.Mode.USER_SPECIFIED_ROUTE);
+            }
+        });
+    }
+
+    @ReactMethod
+    public void startMediaDevicesEventMonitor() {
+        this.dailyWebRTCDevicesManager.startMediaDevicesEventMonitor();
+    }
+
+    @ReactMethod
+    public void getAudioDevice(Promise promise) {
+        ThreadUtils.runOnExecutor(() -> {
+            String deviceId = this.dailyWebRTCDevicesManager.getAudioDevice();
+            promise.resolve(deviceId);
+        });
+    }
+
+    @ReactMethod
+    public void setDailyAudioMode(String audioModeString) {
+        Log.d(TAG, "setDailyAudioMode: " + audioModeString);
+        DailyAudioManager.Mode audioMode;
+        switch (audioModeString) {
+            case "video":
+                audioMode = DailyAudioManager.Mode.VIDEO_CALL;
+                break;
+            case "voice":
+                audioMode = DailyAudioManager.Mode.VOICE_CALL;
+                break;
+            case "idle":
+                audioMode = DailyAudioManager.Mode.IDLE;
+                break;
+            default:
+                throw new IllegalArgumentException(audioModeString);
+        }
+        if (dailyAudioManager == null) {
+            ReactApplicationContext reactContext = getReactApplicationContext();
+            dailyAudioManager = new DailyAudioManager(reactContext, audioMode, this.dailyWebRTCDevicesManager);
+        }
+        else {
+            dailyAudioManager.setMode(audioMode);
+        }
     }
 }
