@@ -1,10 +1,11 @@
 {
   "name": "react-native-webrtc",
-  "version": "118.0.3-daily.4",
+  "version": "118.0.9",
   "repository": {
     "type": "git",
     "url": "git@github.com:daman-talkshoplive/react-native-webrtc.git",
     "fork": "https://github.com/daily-co/react-native-webrtc/commits/main/",
+    "forkVersion": "118.0.3-daily.4",
     "forkLastCommit": "2c5055f"
   },
   "nativePackage": true,
